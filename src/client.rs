@@ -9,12 +9,17 @@ fn main() -> Result<(), anyhow::Error> {
     // command line arguments
     let arguments: Vec<_> = std::env::args().collect();
 
-    if arguments.len() < 2 {
-        eprintln!("usage: client <p2p_port>");
+    if arguments.len() < 1 {
+        eprintln!("usage: client [p2p_port]");
     }
 
     // port number that we will use to listen for a p2p connection
-    let p2p_port: u16 = arguments.get(1).unwrap().parse()?;
+    let p2p_port: u16 = match arguments.get(1) {
+        // if user gives us one, parse it
+        Some(port) => port.parse()?,
+        // else use 0, which means "let the OS give us one"
+        None => 0,
+    };
 
     // incoming network buffer
     let mut buffer = [0u8;2048];
@@ -28,8 +33,13 @@ fn main() -> Result<(), anyhow::Error> {
         p2p_port,
     ))?;
 
-    // send the server our p2p port
-    server_connection.write(&p2p_port.to_string().as_bytes())?;
+    // get the port that the OS gave us
+    let real_p2p_port = peer_listen_socket.local_addr()?.port();
+
+    println!("my p2p port is {}", real_p2p_port);
+
+    // send the server our real p2p port
+    server_connection.write(&real_p2p_port.to_string().as_bytes())?;
 
     // wait for the server to respond
     let len = server_connection.read(&mut buffer)?;

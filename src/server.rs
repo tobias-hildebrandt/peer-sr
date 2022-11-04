@@ -1,51 +1,89 @@
-use std::{net::{SocketAddr, TcpListener}, io::{Read, Write}};
+use std::{
+    io::{Read, Write},
+    net::{SocketAddr, TcpListener},
+};
+
+/// Represents the signaling server
+struct Server {
+    /// Tcp socket that clients connect to, which causes a new socket to be spun off
+    listener: TcpListener,
+    /// Incoming network buffer
+    buffer: [u8; 2048],
+    /// Keeps track of client1's open P2P port
+    client_p2p_socket: Option<SocketAddr>,
+}
+
+impl Server {
+    fn new() -> Result<Self, anyhow::Error> {
+        Ok(Server {
+            listener: TcpListener::bind("127.0.0.1:8888".parse::<SocketAddr>()?)?,
+            buffer: [0u8; 2048],
+            client_p2p_socket: None,
+        })
+    }
+
+    /// Blocks until a client connects, then responds to them and drops their connection
+    fn listen(&mut self) -> Result<(), anyhow::Error> {
+        // block until a client attempts to connect
+        let (mut client_conn, client_addr) = self.listener.accept()?;
+
+        println!("client connected from address: {}", client_addr);
+
+        // wait until the client sends us a message
+        let len = client_conn.read(&mut self.buffer)?;
+
+        // decode bytes as utf-8
+        let client_message = std::str::from_utf8(&self.buffer[0..len])?;
+
+        println!("client sent: {}", client_message);
+
+        // assume the client sent us their p2p port
+        let p2p_port = client_message.parse::<u16>()?;
+
+        match self.client_p2p_socket {
+            None => {
+                // we don't have any other peer to give to the client,
+                // so store their info and tell them to wait
+
+                // calculate their P2P socket via their IP + p2p port
+                let new_p2p_socket = SocketAddr::new(client_addr.ip(), p2p_port);
+
+                println!("new stored client p2p socket is {:?}", new_p2p_socket);
+
+                // store it
+                self.client_p2p_socket = Some(new_p2p_socket);
+
+                // tell client1 we are done and they will be contacted by client2 eventually
+                client_conn.write(&"".as_bytes())?;
+            }
+            Some(sock) => {
+                // we have a peer to give them!
+
+                println!("sending and clearing stored client p2p socket ({})", sock);
+
+                // send it to them
+                client_conn.write(&sock.to_string().as_bytes())?;
+
+                // clear it
+                self.client_p2p_socket = None;
+            }
+        }
+
+        // in either case, we don't need to keep their connection open
+        // so let it get dropped
+        println!("done with client {}\n", client_addr);
+
+        Ok(())
+    }
+}
 
 fn main() -> Result<(), anyhow::Error> {
     println!("starting server");
 
-    // create tcp socket bound to localhost:8888
-    let listen = TcpListener::bind("127.0.0.1:8888".parse::<SocketAddr>()?)?;
+    let mut server = Server::new()?;
 
-    // incoming network buffer
-    let mut buffer = [0u8;2048];
-
-    // block until a client attempts to connect
-    let (mut client1_conn, client1_addr) = listen.accept()?;
-
-    println!("client connected from address: {}", client1_addr);
-
-    // wait until the client sends us a message
-    let len = client1_conn.read(&mut buffer)?;
-
-    // decode bytes as utf-8
-    let client1_message = std::str::from_utf8(&buffer[0..len])?;
-
-    println!("client sent: {}", client1_message);
-
-    // assume the client sent us their p2p port
-    let p2p_port = client1_message.parse::<u16>()?;
-
-    // calculate their P2P port via their IP + p2p port
-    let client1_p2p_socket = SocketAddr::new(
-        client1_addr.ip(),
-        p2p_port,
-    );
-
-    // tell client1 we are done and they will be contacted by client2 eventually
-    client1_conn.write(&"".as_bytes())?;
-
-    // now we are completely done with client1
-    drop(client1_conn);
-    drop(client1_addr);
-
-    // wait for client2 to connect
-    let (mut client2_conn, _client2_addr) = listen.accept()?;
-
-    // send them client1's p2p socket address (ip + port)
-    client2_conn.write(&client1_p2p_socket.to_string().as_bytes())?;
-
-    // we are done
-    println!("server done");
-
-    Ok(())
+    // loop forever, handling clients
+    loop {
+        server.listen()?;
+    }
 }

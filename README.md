@@ -9,19 +9,20 @@
   - No encryption/authentication
 
 ## Step-by-step
-1. Client 1 connects to server
-2. Server responds asking for its P2P socket info
-3. Client 1 sends it, server stores it
-4. Client 1 then listens on its socket
-5. Client 2 connects to server
-6. Server responds by sending the information about Client 1's P2P socket
-8. Client 2 sends message to Client 1
-9. Client 1 responds to Client 2
-
-## Sockets
-- Use TCP for client-server connection
+1. Client opens P2P socket
+2. Client connects to server, tells it its P2P port numbers
+3. If server already has one stored
+   1. Server sends the P2P socket address to the client
+   2. Client then connects to it
+   3. Client can talk directly to peer
+4. Else
+   1. Server calculates the P2P socket address and stores it
+   2. Server tells client to wait
+   3. Client waits until another client connects to it
+   4. Client can talk directly to peer
 
 ## Possible Future Extensions
 - Have the server keep track of multiple clients
 - Allow clients to ask the server for a specific client
 - Allow clients to connect to multiple other clients
+- Make everything asynchronous
