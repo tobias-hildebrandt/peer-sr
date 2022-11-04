@@ -13,3 +13,4 @@ name = "server"
 path = "src/server.rs"
 
 [dependencies]
+anyhow = "1.0.66"
