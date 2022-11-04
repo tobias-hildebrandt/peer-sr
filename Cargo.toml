@@ -1,0 +1,15 @@
+[package]
+name = "p2p-sr"
+version = "0.1.0"
+edition = "2021"
+authors = ["Tobias Hildebrandt <tobiash@tobiash.dev>" ]
+
+[[bin]]
+name = "client"
+path = "src/client.rs"
+
+[[bin]]
+name = "server"
+path = "src/server.rs"
+
+[dependencies]
