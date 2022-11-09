@@ -1,17 +1,108 @@
 use std::{
-    io::{Write, Read},
+    io::{Read, Write},
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream},
 };
+
+/// Represents a p2p client before connection
+struct Client {
+    /// Incoming network buffer
+    buffer: [u8; 2048],
+    /// Listening TCP socket for incoming peer connection
+    peer_listen_socket: TcpListener,
+}
+
+/// Represents a connected p2p client
+struct ConnectedClient {
+    /// Incoming network buffer
+    buffer: [u8; 2048],
+    /// TCP connection to peer
+    peer_connection: TcpStream
+}
+
+impl Client {
+    fn new(port: u16) -> Result<Self, anyhow::Error> {
+        let peer_listen_socket = TcpListener::bind(SocketAddr::new(
+            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            port,
+        ))?;
+        Ok(Self {
+            buffer: [0u8; 2048],
+            peer_listen_socket,
+        })
+    }
+
+    fn real_port(&self) -> Result<u16, anyhow::Error> {
+        Ok(self.peer_listen_socket.local_addr()?.port())
+    }
+
+    /// Connect to server and block until peer connection is made
+    fn connect(mut self) -> Result<ConnectedClient, anyhow::Error> {
+        // get the port that the OS gave us
+        let real_p2p_port = self.peer_listen_socket.local_addr()?.port();
+
+        println!("my p2p port is {}", real_p2p_port);
+
+        let mut server_connection = TcpStream::connect("127.0.0.1:8888".parse::<SocketAddr>()?)?;
+
+        // send the server our real p2p port
+        server_connection.write_all(real_p2p_port.to_string().as_bytes())?;
+
+        // wait for the server to respond
+        let len = server_connection.read(&mut self.buffer)?;
+
+        if len == 0 {
+            // server has told us we are client1
+            println!("i am client1, waiting for connection from client2");
+
+            // wipe buffer
+            self.buffer.fill(0);
+
+            // wait for client2 to connect to our p2p port
+            let (peer_connection, peer_address) = self.peer_listen_socket.accept()?;
+
+            println!("connected to {}", peer_address);
+
+            Ok(ConnectedClient {
+                buffer: self.buffer,
+                peer_connection,
+            })
+        } else {
+            // server has told us we are client2
+            let peer_address: SocketAddr = std::str::from_utf8(&self.buffer[0..len])?.parse()?;
+
+            // wipe buffer
+            self.buffer.fill(0);
+
+            println!("i am client2");
+
+            let peer_connection = TcpStream::connect(peer_address)?;
+
+            println!("connected to {}", peer_address);
+
+            Ok(ConnectedClient {
+                buffer: self.buffer,
+                peer_connection,
+            })
+        }
+    }
+}
+
+impl ConnectedClient {
+    fn send(&mut self, message: &[u8]) -> Result<(), anyhow::Error> {
+        Ok(self.peer_connection.write_all(message)?)
+    }
+
+    fn receive(&mut self) -> Result<&str, anyhow::Error> {
+        let _size = self.peer_connection.read(&mut self.buffer)?;
+        Ok(std::str::from_utf8(&self.buffer)?)
+    }
+}
 
 fn main() -> Result<(), anyhow::Error> {
     println!("starting client");
 
     // command line arguments
     let arguments: Vec<_> = std::env::args().collect();
-
-    if arguments.len() < 1 {
-        eprintln!("usage: client [p2p_port]");
-    }
 
     // port number that we will use to listen for a p2p connection
     let p2p_port: u16 = match arguments.get(1) {
@@ -21,67 +112,17 @@ fn main() -> Result<(), anyhow::Error> {
         None => 0,
     };
 
-    // incoming network buffer
-    let mut buffer = [0u8;2048];
+    let client = Client::new(p2p_port)?;
 
-    // connect to the server
-    let mut server_connection = TcpStream::connect("127.0.0.1:8888".parse::<SocketAddr>()?)?;
+    let real_port = client.real_port()?;
 
-    // the socket that we will listen on for our peer
-    let peer_listen_socket = TcpListener::bind(SocketAddr::new(
-        IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-        p2p_port,
-    ))?;
+    let mut connected = client.connect()?;
 
-    // get the port that the OS gave us
-    let real_p2p_port = peer_listen_socket.local_addr()?.port();
+    connected.send(format!("hello from {}", real_port).as_bytes())?;
 
-    println!("my p2p port is {}", real_p2p_port);
+    let received = connected.receive()?;
 
-    // send the server our real p2p port
-    server_connection.write(&real_p2p_port.to_string().as_bytes())?;
-
-    // wait for the server to respond
-    let len = server_connection.read(&mut buffer)?;
-
-    if len == 0 {
-        // server has told us we are client1
-        println!("i am client1, waiting for connection from client2");
-
-        // wipe buffer
-        buffer.fill(0);
-
-        // wait for client2 to connect to our p2p port
-        let (mut peer_connection, peer_address) = peer_listen_socket.accept()?;
-
-        println!("connection from client2: {}", peer_address);
-
-        peer_connection.read(&mut buffer)?;
-
-        let message = std::str::from_utf8(&buffer)?;
-
-        println!("got message: {}", message);
-
-        peer_connection.write("this is a response from client1".as_bytes())?;
-    } else {
-        // server has told us we are client2
-        let peer_address: SocketAddr = std::str::from_utf8(&buffer[0..len])?.parse()?;
-
-        // wipe buffer
-        buffer.fill(0);
-
-        println!("i am client2, sending message to client1: {}", peer_address);
-
-        let mut peer_connection = TcpStream::connect(peer_address)?;
-
-        peer_connection.write(&"this is a message from client2".as_bytes())?;
-
-        peer_connection.read(&mut buffer)?;
-
-        let message = std::str::from_utf8(&buffer)?;
-
-        println!("got message: {}", message);
-    }
+    println!("received message: {}", received);
 
     Ok(())
 }

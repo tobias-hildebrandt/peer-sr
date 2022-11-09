@@ -54,7 +54,7 @@ impl Server {
                 self.client_p2p_socket = Some(new_p2p_socket);
 
                 // tell client1 we are done and they will be contacted by client2 eventually
-                client_conn.write(&"".as_bytes())?;
+                client_conn.write_all("".as_bytes())?;
             }
             Some(sock) => {
                 // we have a peer to give them!
@@ -62,7 +62,7 @@ impl Server {
                 println!("sending and clearing stored client p2p socket ({})", sock);
 
                 // send it to them
-                client_conn.write(&sock.to_string().as_bytes())?;
+                client_conn.write_all(sock.to_string().as_bytes())?;
 
                 // clear it
                 self.client_p2p_socket = None;
