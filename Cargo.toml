@@ -12,5 +12,9 @@ path = "src/client.rs"
 name = "server"
 path = "src/server.rs"
 
+[lib]
+name = "lib_p2p_sr"
+path = "src/lib.rs"
+
 [dependencies]
 anyhow = "1.0.66"
