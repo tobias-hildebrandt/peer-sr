@@ -28,12 +28,15 @@ fn main() -> Result<(), anyhow::Error> {
     // command line arguments
     let arguments = Args::parse();
 
+    // make a new client
     let client = Client::new(arguments.p2p_port)?;
 
     let real_port = client.real_port()?;
 
+    // connect to server then to peer
     let mut connected = client.connect()?;
 
+    // send some messages
     for i in 0..arguments.send {
         connected.send(format!("message #{} from port {}", i, real_port))?;
         if arguments.debug {
@@ -41,6 +44,7 @@ fn main() -> Result<(), anyhow::Error> {
         }
     }
 
+    // wait until we receive some messages
     for i in 0..arguments.receive {
         let received = connected.receive()?;
         if arguments.debug {

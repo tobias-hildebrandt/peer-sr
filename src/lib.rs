@@ -3,7 +3,7 @@ use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream},
 };
 
-/// Byte that deliniates messages
+/// Byte that delineates messages
 const MESSAGE_END: u8 = 0;
 
 /// Represents the signaling server
@@ -39,7 +39,7 @@ impl Server {
         // decode bytes as utf-8
         let client_message = std::str::from_utf8(&self.buffer[0..len])?;
 
-        println!("client sent: {}", client_message);
+        println!("client sent (as their p2p port number): {}", client_message);
 
         // assume the client sent us their p2p port
         let p2p_port = client_message.parse::<u16>()?;
@@ -102,6 +102,7 @@ pub struct ConnectedClient {
 impl Client {
     /// Create a new client, not yet connected to anything
     pub fn new(port: u16) -> Result<Self, anyhow::Error> {
+        // bind to p2p socket
         let peer_listen_socket = TcpListener::bind(SocketAddr::new(
             IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
             port,
@@ -124,6 +125,7 @@ impl Client {
 
         println!("my p2p port is {}", real_p2p_port);
 
+        // connect to server
         let mut server_connection = TcpStream::connect("127.0.0.1:8888".parse::<SocketAddr>()?)?;
 
         // send the server our real p2p port
@@ -155,6 +157,7 @@ impl Client {
 
             println!("i am client2");
 
+            // connect to peer
             let peer_connection = TcpStream::connect(peer_address)?;
 
             println!("connected to {}", peer_address);
@@ -193,7 +196,7 @@ impl ConnectedClient {
     /// Block until we receive a message from our peer
     pub fn receive(&mut self) -> Result<&str, anyhow::Error> {
 
-        // read one by one until we encounted terminator
+        // read bytes in one by one until we encounter terminator
         let mut byte_count = 0;
         let mut current_byte = [0u8];
         loop {
