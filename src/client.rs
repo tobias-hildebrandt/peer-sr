@@ -1,30 +1,54 @@
+use clap::Parser;
 use lib_p2p_sr::Client;
+
+/// Command line arguments for our client
+#[derive(Parser)]
+struct Args {
+    /// port number that we will use to listen for a p2p connection
+    /// defaults to 0, meaning "let the OS decide"
+    #[arg(short, long, default_value_t = 0)]
+    p2p_port: u16,
+
+    /// How many messages should we expect to receive
+    #[arg(short, long, default_value_t = 5)]
+    receive: u32,
+
+    /// How many messages should we sent
+    #[arg(short, long, default_value_t = 5)]
+    send: u32,
+
+    /// Should we print out messages that we sent and receive?
+    #[arg(short, long, default_value_t = true)]
+    debug: bool
+}
 
 fn main() -> Result<(), anyhow::Error> {
     println!("starting client");
 
     // command line arguments
-    let arguments: Vec<_> = std::env::args().collect();
+    let arguments = Args::parse();
 
-    // port number that we will use to listen for a p2p connection
-    let p2p_port: u16 = match arguments.get(1) {
-        // if user gives us one, parse it
-        Some(port) => port.parse()?,
-        // else use 0, which means "let the OS give us one"
-        None => 0,
-    };
-
-    let client = Client::new(p2p_port)?;
+    let client = Client::new(arguments.p2p_port)?;
 
     let real_port = client.real_port()?;
 
     let mut connected = client.connect()?;
 
-    connected.send(format!("hello from {}", real_port).as_bytes())?;
+    for i in 0..arguments.send {
+        connected.send(format!("message #{} from port {}", i, real_port))?;
+        if arguments.debug {
+            println!("sent message #{}", i);
+        }
+    }
 
-    let received = connected.receive()?;
+    for i in 0..arguments.receive {
+        let received = connected.receive()?;
+        if arguments.debug {
+            println!("received message #{}: \'{}\'", i, received);
+        }
+    }
 
-    println!("received message: {}", received);
+    println!("done");
 
     Ok(())
 }
